@@ -7,13 +7,13 @@ import Hero from "./components/Hero";
 
 export default function RootLayout({ children }) {
   return (
-    <ClerkProvider>
       <html lang="en">
         <body>
           {/* <Hero /> */}
+          <ClerkProvider>
           {children}
+          </ClerkProvider>
         </body>
       </html>
-    </ClerkProvider>
   );
 }
