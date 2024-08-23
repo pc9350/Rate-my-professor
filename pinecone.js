@@ -16,10 +16,17 @@ const indexName = process.env.PINECONE_INDEX_NAME;
 
 // Function to generate vector embeddings from text
 const generateVector = (text) => {
-  // Replace this with actual embedding generation logic
-  // Ensure the logic generates vectors with the correct dimensions (1536 in this case)
-  return encode(text).slice(0, 1536); // Adjust based on your actual embedding model
-};
+    // Replace this with actual embedding generation logic
+    const vector = encode(text);
+  
+    // Ensure the vector has exactly 1536 dimensions
+    if (vector.length >= 1536) {
+      return vector.slice(0, 1536);
+    } else {
+      // Pad the vector with zeros if it's shorter than 1536 dimensions
+      return [...vector, ...Array(1536 - vector.length).fill(0)];
+    }
+  };
 
 // Function to read and process reviews.json
 const processReviews = () => {
