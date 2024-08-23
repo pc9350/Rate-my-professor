@@ -1,0 +1,125 @@
+{
+    "Review": [
+      {
+        "professor": "Dr. John Smith",
+        "subject": "Mathematics",
+        "stars": 4,
+        "reviews": "Dr. Smith explains concepts clearly and is always willing to help."
+      },
+      {
+        "professor": "Dr. Emily Johnson",
+        "subject": "Computer Science",
+        "stars": 5,
+        "reviews": "She is extremely knowledgeable and makes the lectures interesting."
+      },
+      {
+        "professor": "Dr. Michael Brown",
+        "subject": "Physics",
+        "stars": 3,
+        "reviews": "The lectures are sometimes hard to follow, but he's helpful during office hours."
+      },
+      {
+        "professor": "Dr. Jennifer Davis",
+        "subject": "Biology",
+        "stars": 5,
+        "reviews": "Her passion for the subject is contagious, and she is very approachable."
+      },
+      {
+        "professor": "Dr. William Garcia",
+        "subject": "Chemistry",
+        "stars": 2,
+        "reviews": "Dr. Garcia's classes are tough, and he moves through material too quickly."
+      },
+      {
+        "professor": "Dr. Sarah Martinez",
+        "subject": "English Literature",
+        "stars": 4,
+        "reviews": "She is very engaging and provides great insights into the readings."
+      },
+      {
+        "professor": "Dr. Robert Lee",
+        "subject": "History",
+        "stars": 5,
+        "reviews": "His storytelling makes history come alive. Best history professor I've had."
+      },
+      {
+        "professor": "Dr. Linda Thompson",
+        "subject": "Psychology",
+        "stars": 3,
+        "reviews": "She is knowledgeable, but her lectures can be a bit dry."
+      },
+      {
+        "professor": "Dr. David White",
+        "subject": "Economics",
+        "stars": 4,
+        "reviews": "Dr. White provides real-world examples that make the material easier to understand."
+      },
+      {
+        "professor": "Dr. Barbara Harris",
+        "subject": "Sociology",
+        "stars": 5,
+        "reviews": "She is very empathetic and encourages open discussions in class."
+      },
+      {
+        "professor": "Dr. Richard Clark",
+        "subject": "Philosophy",
+        "stars": 2,
+        "reviews": "His lectures are confusing, and it's hard to get clear answers to questions."
+      },
+      {
+        "professor": "Dr. Maria Lewis",
+        "subject": "Art History",
+        "stars": 4,
+        "reviews": "She has a deep understanding of art and shares fascinating insights."
+      },
+      {
+        "professor": "Dr. James Walker",
+        "subject": "Political Science",
+        "stars": 3,
+        "reviews": "Dr. Walker is knowledgeable, but his exams are very difficult."
+      },
+      {
+        "professor": "Dr. Patricia Young",
+        "subject": "Engineering",
+        "stars": 5,
+        "reviews": "She is brilliant and very supportive. Her classes are challenging but rewarding."
+      },
+      {
+        "professor": "Dr. Thomas King",
+        "subject": "Statistics",
+        "stars": 4,
+        "reviews": "He makes statistics interesting and provides lots of practice problems."
+      },
+      {
+        "professor": "Dr. Karen Wright",
+        "subject": "Nursing",
+        "stars": 5,
+        "reviews": "Dr. Wright is caring and an excellent teacher. She prepares students well for clinicals."
+      },
+      {
+        "professor": "Dr. Christopher Scott",
+        "subject": "Music",
+        "stars": 4,
+        "reviews": "His passion for music is evident, and he encourages creativity."
+      },
+      {
+        "professor": "Dr. Angela Green",
+        "subject": "Theater",
+        "stars": 3,
+        "reviews": "Her classes are enjoyable, but she can be very strict with grading."
+      },
+      {
+        "professor": "Dr. Joseph Baker",
+        "subject": "Anthropology",
+        "stars": 5,
+        "reviews": "He is very knowledgeable and encourages students to think critically."
+      },
+      {
+        "professor": "Dr. Nancy Carter",
+        "subject": "Linguistics",
+        "stars": 4,
+        "reviews": "She is very clear and concise in her explanations, making complex topics easier to understand."
+      }
+    ]
+  }
+  
