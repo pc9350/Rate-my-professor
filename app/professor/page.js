@@ -39,10 +39,15 @@ export default function Home() {
       const professorInfo = data.professorInfo;
       const feedbacks = data.feedbacks;
 
+      const [department, university] = extractDepartmentAndUniversity(
+        professorInfo.department
+      );
+
       // Format professorInfo as a comma-separated string
       const professorInfoString = [
         `Name: ${professorInfo.name || "Unknown"}`,
-        `Department: ${professorInfo.department || "Unknown"}`,
+        `Department: ${department || "Unknown"}`,
+        `University: ${university || "Unknown"}`,
         `Overall Rating: ${professorInfo.overallRating || "N/A"}`,
         `Number of Ratings: ${professorInfo.numRatings || "0"}`,
         `Would Take Again: ${professorInfo.wouldTakeAgain || "N/A"}`,
@@ -79,6 +84,15 @@ export default function Home() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const extractDepartmentAndUniversity = (departmentInfo) => {
+    const parts = departmentInfo.split(" at ");
+    const department = parts[0]
+      .replace("Professor in the ", "")
+      .replace(" department", "");
+    const university = parts[1] || "Unknown";
+    return [department, university];
   };
 
   const extractProfessorId = (url) => {
