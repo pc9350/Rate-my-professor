@@ -119,6 +119,12 @@
         "subject": "Linguistics",
         "stars": 4,
         "reviews": "She is very clear and concise in her explanations, making complex topics easier to understand."
+      },
+      {
+        "professor": "Dr. Amanda Collins",
+        "subject": "Environmental Science",
+        "stars": 4,
+        "reviews": "Dr. Collins is passionate about the environment and makes the class engaging with hands-on activities."
       }
     ]
   }
