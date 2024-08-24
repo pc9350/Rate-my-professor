@@ -1,8 +1,8 @@
-// ProfessorList.js
 "use client";
 import { useState, useEffect } from "react";
+import DynamicNavbar from "../components/DynamicNavbar";
 
-export default function ProfessorList() {
+export default function Professors() {
   const [professors, setProfessors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -31,20 +31,24 @@ export default function ProfessorList() {
   if (error) return <div>Error: {error}</div>;
 
   return (
-    <div>
-      <h1>Professor List</h1>
-      {professors.map((professor) => {
-        const infoArray = professor.professorInfo.split(", ");
-        return (
-          <div key={professor.id}>
-            <h2>{infoArray[0].split(": ")[1]}</h2>
-            {infoArray.map((info, index) => (
-              <p key={index}>{info}</p>
-            ))}
-            <hr />
-          </div>
-        );
-      })}
+    <div className="min-h-screen bg-gradient-to-br from-indigo-900 to-purple-800">
+      <DynamicNavbar />
+      <div className="container mx-auto px-4 py-20">
+        <h1 className="text-4xl font-bold text-white mb-8">Professors List</h1>
+        {/* Add your professors list component here */}
+        {professors.map((professor) => {
+          const infoArray = professor.professorInfo.split(", ");
+          return (
+            <div key={professor.id}>
+              <h2>{infoArray[0].split(": ")[1]}</h2>
+              {infoArray.map((info, index) => (
+                <p key={index}>{info}</p>
+              ))}
+              <hr />
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

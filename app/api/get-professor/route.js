@@ -32,7 +32,7 @@ async function getEmbedding(text) {
 
 async function queryPinecone(query) {
   const q_embedding = await getEmbedding(query);
-  const index = pinecone.Index("professors-index");
+  const index = pinecone.Index("rate");
 
   const queryResponse = await index.query({
     vector: q_embedding,

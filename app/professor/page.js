@@ -1,6 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
+import ChatbotInterface from "../components/ChatBotInterface";
+import DynamicNavbar from "../components/DynamicNavbar";
+import Spline from "@splinetool/react-spline";
 
 export default function Home() {
   const [professorId, setProfessorId] = useState("");
@@ -43,7 +47,6 @@ export default function Home() {
         professorInfo.department
       );
 
-      // Format professorInfo as a comma-separated string
       const professorInfoString = [
         `Name: ${professorInfo.name || "Unknown"}`,
         `Department: ${department || "Unknown"}`,
@@ -55,7 +58,6 @@ export default function Home() {
         `Top Tags: ${professorInfo.topTags.join(", ") || "None"}`,
       ].join(", ");
 
-      // Format feedbacks as a comma-separated string
       const feedbacksString = feedbacks
         .map((feedback) =>
           [
@@ -69,7 +71,6 @@ export default function Home() {
         )
         .join("; ");
 
-      // Send professor info and feedbacks to the API for embedding and storage
       await sendToEmbeddingAPI(
         professorId,
         professorInfoString,
@@ -120,11 +121,8 @@ export default function Home() {
       const result = await response.json();
       console.log("Embedding and storage result:", result);
 
-      //next question
-
       const professorId = extractProfessorId(source);
 
-      // Ensure professorInfo and feedbacks are objects or arrays
       const response2 = await fetch("/api/add-details", {
         method: "POST",
         headers: {
@@ -132,7 +130,7 @@ export default function Home() {
         },
         body: JSON.stringify({
           source: professorId,
-          professorInfo, // Send as an object
+          professorInfo,
         }),
       });
 
@@ -182,37 +180,30 @@ export default function Home() {
   };
 
   return (
-    <div>
-      <h1>RateMyProfessors Feedback Scraper</h1>
-      <div>
-        <input
-          type="text"
-          value={professorId}
-          onChange={(e) => setProfessorId(e.target.value)}
-          placeholder="Enter Professor URL: "
-        />
-        <button onClick={handleSubmit} disabled={isLoading}>
-          {isLoading ? "Scraping..." : "Scrape Feedback"}
-        </button>
-      </div>
-      <div>
-        <input
-          type="text"
-          value={userQuery}
-          onChange={(e) => setUserQuery(e.target.value)}
-          placeholder="Ask a question about the professor"
-        />
-        <button onClick={handleQuery} disabled={isQuerying}>
-          {isQuerying ? "Querying..." : "Ask Question"}
-        </button>
-      </div>
-      {error && <p style={{ color: "red" }}>Error: {error}</p>}
-      {answer && (
-        <div>
-          <h2>Answer:</h2>
-          <p>{answer}</p>
+    <div className="relative min-h-screen bg-gradient-to-br from-indigo-900 to-purple-800 overflow-hidden">
+      <DynamicNavbar />
+      <div className="container mx-auto px-4 py-20 flex flex-col lg:flex-row justify-between items-center">
+        <div className="w-full lg:w-1/2 h-[500px] mb-8 lg:mb-0 relative">
+          <div className="absolute inset-0 z-0">
+            <Spline scene="https://prod.spline.design/h-MzhlKtinRO8ewm/scene.splinecode" />
+          </div>
         </div>
-      )}
+
+        <div className="w-full lg:w-1/2 lg:pl-8">
+          <ChatbotInterface
+            professorId={professorId}
+            setProfessorId={setProfessorId}
+            userQuery={userQuery}
+            setUserQuery={setUserQuery}
+            handleSubmit={handleSubmit}
+            handleQuery={handleQuery}
+            isLoading={isLoading}
+            isQuerying={isQuerying}
+            error={error}
+            answer={answer}
+          />
+        </div>
+      </div>
     </div>
   );
 }
