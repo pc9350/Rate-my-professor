@@ -10,7 +10,7 @@ export default function ProfessorList() {
   useEffect(() => {
     const fetchProfessors = async () => {
       try {
-        const response = await fetch("/api/get-details");
+        const response = await fetch("/api/professors");
         if (!response.ok) {
           throw new Error("Failed to fetch professors");
         }

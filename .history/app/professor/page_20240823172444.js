@@ -1,5 +1,6 @@
 "use client";
 
+import { doc, setDoc } from "firebase/firestore";
 import { useState } from "react";
 
 export default function Home() {
@@ -102,14 +103,15 @@ export default function Home() {
 
   const sendToEmbeddingAPI = async (source, professorInfo, feedbacks) => {
     try {
-      const response = await fetch("/api/add-professor", {
+      const response = await fetch("/api/add-details", {
+        // Note the updated API route
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           source,
-          text: `Professor Information: ${professorInfo}\n\nFeedbacks: ${feedbacks}`,
+          professorInfo,
         }),
       });
 
@@ -118,33 +120,13 @@ export default function Home() {
       }
 
       const result = await response.json();
-      console.log("Embedding and storage result:", result);
+      console.log("Professor information stored:", result);
 
-      //next question
-
-      const professorId = extractProfessorId(source);
-
-      // Ensure professorInfo and feedbacks are objects or arrays
-      const response2 = await fetch("/api/add-details", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          source: professorId,
-          professorInfo, // Send as an object
-        }),
+      await setDoc(doc(db, "professor", source), {
+        professorInfo,
       });
 
-      if (!response2.ok) {
-        const errorData = await response2.json();
-        throw new Error(
-          `HTTP error! status: ${response2.status}, message: ${errorData.error}, details: ${errorData.details}`
-        );
-      }
-
-      const result2 = await response.json();
-      console.log("Professor information stored:", result2);
+      console.log("Professor information stored in Firebase");
     } catch (error) {
       console.error("Error sending data for embedding:", error);
     }

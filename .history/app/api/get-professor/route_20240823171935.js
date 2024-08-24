@@ -40,7 +40,7 @@ async function queryPinecone(query) {
     includeMetadata: true,
   });
 
-  // console.log("query:", queryResponse);
+  console.log("query:", queryResponse);
 
   return queryResponse.matches
     .filter((match) => match.metadata?.text)

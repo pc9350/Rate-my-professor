@@ -133,13 +133,14 @@ export default function Home() {
         body: JSON.stringify({
           source: professorId,
           professorInfo, // Send as an object
+          feedbacks, // Also include feedbacks if needed
         }),
       });
 
-      if (!response2.ok) {
-        const errorData = await response2.json();
+      if (!response.ok) {
+        const errorData = await response.json();
         throw new Error(
-          `HTTP error! status: ${response2.status}, message: ${errorData.error}, details: ${errorData.details}`
+          `HTTP error! status: ${response.status}, message: ${errorData.error}, details: ${errorData.details}`
         );
       }
 

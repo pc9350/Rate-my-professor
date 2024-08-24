@@ -1,5 +1,6 @@
 "use client";
 
+import { doc, setDoc } from "firebase/firestore";
 import { useState } from "react";
 
 export default function Home() {
@@ -102,49 +103,28 @@ export default function Home() {
 
   const sendToEmbeddingAPI = async (source, professorInfo, feedbacks) => {
     try {
-      const response = await fetch("/api/add-professor", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          source,
-          text: `Professor Information: ${professorInfo}\n\nFeedbacks: ${feedbacks}`,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      console.log("Embedding and storage result:", result);
-
-      //next question
-
       const professorId = extractProfessorId(source);
 
-      // Ensure professorInfo and feedbacks are objects or arrays
-      const response2 = await fetch("/api/add-details", {
+      const response = await fetch("/api/add-details", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           source: professorId,
-          professorInfo, // Send as an object
+          professorInfo,
         }),
       });
 
-      if (!response2.ok) {
-        const errorData = await response2.json();
+      if (!response.ok) {
+        const errorData = await response.json();
         throw new Error(
-          `HTTP error! status: ${response2.status}, message: ${errorData.error}, details: ${errorData.details}`
+          `HTTP error! status: ${response.status}, message: ${errorData.error}, details: ${errorData.details}`
         );
       }
 
-      const result2 = await response.json();
-      console.log("Professor information stored:", result2);
+      const result = await response.json();
+      console.log("Professor information stored:", result);
     } catch (error) {
       console.error("Error sending data for embedding:", error);
     }

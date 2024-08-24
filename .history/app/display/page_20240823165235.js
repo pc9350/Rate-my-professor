@@ -1,6 +1,8 @@
 // ProfessorList.js
 "use client";
 import { useState, useEffect } from "react";
+import { db } from "../firebase";
+import { collection, getDocs } from "firebase/firestore";
 
 export default function ProfessorList() {
   const [professors, setProfessors] = useState([]);
@@ -10,15 +12,16 @@ export default function ProfessorList() {
   useEffect(() => {
     const fetchProfessors = async () => {
       try {
-        const response = await fetch("/api/get-details");
-        if (!response.ok) {
-          throw new Error("Failed to fetch professors");
-        }
-        const data = await response.json();
-        setProfessors(data);
+        const professorCollection = collection(db, "professors");
+        const professorSnapshot = await getDocs(professorCollection);
+        const professorList = professorSnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setProfessors(professorList);
       } catch (err) {
         console.error("Error fetching professors:", err);
-        setError(err.message);
+        setError("Failed to fetch professors");
       } finally {
         setLoading(false);
       }
