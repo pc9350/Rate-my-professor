@@ -39,7 +39,7 @@ async function splitText(text) {
 }
 
 async function embedAndStore(chunks, source) {
-  const index = pinecone.Index("rate");
+  const index = pinecone.Index("professors-index");
 
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
