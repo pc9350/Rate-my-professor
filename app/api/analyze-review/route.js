@@ -1,28 +1,73 @@
+// app/api/analyze-review/route.js
 
-// pages/api/analyzeAndStore.js
-import { analyzeSentiment } from '../../utils/transformer';
-import pineconeClient from '../../utils/pinecone'; 
+import { HfInference } from "@huggingface/inference";
+import { Pinecone } from "@pinecone-database/pinecone";
 
-export default async function handler(req, res) {
-  if (req.method === 'POST') {
-    const { professorId, review } = req.body;//will have to change this based on the type of data being received
+const hf = new HfInference(process.env.HUGGINGFACE_API_KEY);
 
-    // Analyze sentiment
-    const sentimentScore = analyzeSentiment(review);
+const pinecone = new Pinecone({
+  apiKey: process.env.PINECONE_API_KEY,
+});
 
-    // Store in Pinecone-change based on the db schema
-    await pineconeClient.upsert({
-      indexName: 'professors-index',
-      records: [
-        {
-          id: professorId,
-          values: [sentimentScore],
+async function analyzeSentiment(text) {
+  const response = await hf.textClassification({
+    model: "distilbert-base-uncased-finetuned-sst-2-english",
+    inputs: text,
+  });
+
+  // Extract sentiment and confidence score
+  const sentiment = response[0].label;
+  const confidence = response[0].score;
+
+  // Convert sentiment label to a numeric score
+  const sentimentScore = sentiment === "POSITIVE" ? confidence : -confidence;
+
+  return { sentiment, sentimentScore, confidence };
+}
+
+async function upsertSentimentReview(professorId, review, sentimentData) {
+  const index = pinecone.Index("professors-index");
+
+  await index.upsert([
+    {
+      id: `${professorId}-${Date.now()}`,
+      values: [sentimentData.sentimentScore],
+      metadata: {
+        text: review,
+        sentiment: sentimentData.sentiment,
+        confidence: sentimentData.confidence,
+        professorId,
+      },
+    },
+  ]);
+}
+
+export async function POST(req) {
+  const { professorId, review } = await req.json();
+
+  try {
+    // Analyze the sentiment of the review
+    const sentimentData = await analyzeSentiment(review);
+
+    // Upsert the sentiment analysis result into Pinecone
+    await upsertSentimentReview(professorId, review, sentimentData);
+
+    return new Response(
+      JSON.stringify({ success: true, sentimentData }),
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
         },
-      ],
+      }
+    );
+  } catch (error) {
+    console.error("Error processing request:", error);
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: {
+        "Content-Type": "application/json",
+      },
     });
-
-    res.status(200).json({ success: true });
-  } else {
-    res.status(405).json({ message: 'Method not allowed' });
   }
 }
