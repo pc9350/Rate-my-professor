@@ -1,7 +1,19 @@
+"use client";
 import Navbar from './Navbar';
-import { SignInButton } from "@clerk/nextjs";
+import { SignInButton, useUser  } from "@clerk/nextjs";
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 
 export default function Hero() {
+  const { isSignedIn } = useUser();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isSignedIn) {
+      router.push('/professor');
+    }
+  }, [isSignedIn, router]);
+
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-blue-100 to-indigo-200 overflow-hidden">
       <Navbar />

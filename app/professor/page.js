@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect  } from "react";
+import ProfessorList from '../components/ProfessorList';
 
 export default function Home() {
   const [professorId, setProfessorId] = useState("");
@@ -9,6 +10,7 @@ export default function Home() {
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isQuerying, setIsQuerying] = useState(false);
+  const [professors, setProfessors] = useState([]);
 
   const handleSubmit = async () => {
     const extractedId = extractProfessorId(professorId);
@@ -140,6 +142,24 @@ export default function Home() {
       setIsQuerying(false);
     }
   };
+  useEffect(() => {
+    const fetchProfessors = async () => {
+      // Fetch the list of professors from your API or database
+      const response = await fetch('/api/get-professor');
+      console.log('Response:', response);
+      const result = await response.json();
+      console.log(result.professors)
+      if (response.ok) {
+
+        setProfessors(result.professors);
+      } else {
+        console.error('Error fetching professors:', result.error);
+      }
+    };
+
+    fetchProfessors();
+  }, []);
+
 
   return (
     <div>
@@ -173,6 +193,9 @@ export default function Home() {
           <p>{answer}</p>
         </div>
       )}
+       <h2>Professor List</h2>
+       <ProfessorList professors={professors} />
+
     </div>
   );
 }
