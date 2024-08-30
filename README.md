@@ -4,8 +4,8 @@ Profscore is an innovative AI-driven platform designed to help students find and
 
 ## 🚀 Live Demo & Video
 
-- [Live Demo](#https://profscore-beta.vercel.app/) 🌐
-- [YouTube Demo Video](#https://youtu.be/oqETFLOss9I) 🎥
+- [Live Demo](https://profscore-beta.vercel.app/) 🌐
+- [YouTube Demo Video](https://youtu.be/oqETFLOss9I) 🎥
 
 ## 📜 Table of Contents
 
