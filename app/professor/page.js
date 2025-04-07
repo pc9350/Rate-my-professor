@@ -13,6 +13,15 @@ import Spline from "@splinetool/react-spline";
 //   loading: () => <p>Loading 3D model...</p>,
 // });
 
+// Add this helper function at the beginning of the file, after imports
+const isDev = process.env.NODE_ENV === 'development';
+
+// Create a safe console logger that only logs in development
+const devLogger = {
+  log: (...args) => isDev && console.log(...args),
+  error: (...args) => isDev && console.error(...args)
+};
+
 export default function Home() {
   const [professorId, setProfessorId] = useState("");
   const [userQuery, setUserQuery] = useState("");
@@ -87,10 +96,10 @@ export default function Home() {
         feedbacksString
       );
 
-      console.log("Professor Information:", professorInfoString);
-      console.log("Feedbacks:", feedbacksString);
+      devLogger.log("Professor Information:", professorInfoString);
+      devLogger.log("Feedbacks:", feedbacksString);
     } catch (err) {
-      console.error("Error:", err.message);
+      devLogger.error("Error:", err.message);
       setError(err.message);
     } finally {
       setIsLoading(false);
@@ -104,6 +113,7 @@ export default function Home() {
 
   const sendToEmbeddingAPI = async (source, professorInfo, feedbacks) => {
     try {
+      devLogger.log("Preparing data for embedding API...");
       const text = `Professor Information: ${professorInfo}\n\nFeedbacks: ${feedbacks}`;
       const chunkSize = 5000; // Adjust this value based on your needs
       const chunks = [];
@@ -112,35 +122,73 @@ export default function Home() {
         chunks.push(text.slice(i, i + chunkSize));
       }
 
+      devLogger.log(`Prepared ${chunks.length} chunks for processing`);
+
       for (let i = 0; i < chunks.length; i++) {
-        const response = await fetch("/api/add-professor", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            source,
-            text: chunks[i],
-            chunkIndex: i,
-            totalChunks: chunks.length,
-          }),
-        });
+        setError(null);
+        devLogger.log(`Sending chunk ${i + 1}/${chunks.length} to the API...`);
+        
+        try {
+          const response = await fetch("/api/add-professor", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              source,
+              text: chunks[i],
+              chunkIndex: i,
+              totalChunks: chunks.length,
+            }),
+          });
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(
-            `HTTP error! status: ${response.status}, message: ${errorData.error}`
-          );
+          // Handle non-200 responses
+          if (!response.ok) {
+            const errorData = await response.json();
+            devLogger.error(`API error (${response.status}):`, errorData);
+            
+            // If this is a Pinecone error, show a more helpful message
+            if (errorData.error && (
+                errorData.error.includes("Pinecone") || 
+                errorData.error.includes("index") || 
+                errorData.error.includes("vector"))) {
+              throw new Error(`Database storage error: ${errorData.error}`);
+            } else {
+              throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error || "Unknown error"}`);
+            }
+          }
+
+          const result = await response.json();
+          devLogger.log(`Chunk ${i + 1}/${chunks.length} processed:`, result);
+          
+          // If there are multiple chunks, show progress
+          if (chunks.length > 1) {
+            setError(`Processing data: ${i + 1}/${chunks.length} chunks completed.`);
+          }
+          
+          // Add a small delay between requests to avoid overwhelming the API
+          if (i < chunks.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        } catch (chunkError) {
+          devLogger.error(`Error processing chunk ${i + 1}:`, chunkError);
+          throw new Error(`Error processing chunk ${i + 1}: ${chunkError.message}`);
         }
-
-        const result = await response.json();
-        console.log(`Chunk ${i + 1}/${chunks.length} processed:`, result);
       }
 
-      console.log("All chunks processed successfully");
+      setError(null);
+      devLogger.log("All chunks processed successfully");
     } catch (error) {
-      console.error("Error sending data for embedding:", error);
-      setError(`Error: ${error.message}`);
+      devLogger.error("Error sending data for embedding:", error);
+      
+      // Provide more specific error messages based on the error
+      if (error.message.includes("Failed to fetch") || error.message.includes("NetworkError")) {
+        setError("Network error when saving professor data. Please check your internet connection and try again.");
+      } else if (error.message.includes("Pinecone") || error.message.includes("index") || error.message.includes("Database storage")) {
+        setError(`Database error: ${error.message}. The system admin has been notified.`);
+      } else {
+        setError(`Error: ${error.message}`);
+      }
     }
   };
 
@@ -153,23 +201,67 @@ export default function Home() {
     setIsQuerying(true);
     setError(null);
     try {
+      // Generate a session ID based on the professor ID to maintain context per professor
+      const sessionId = professorId ? `session-${extractProfessorId(professorId)}` : 'default-session';
+      
+      devLogger.log(`Sending query: "${userQuery}" with session ID: ${sessionId}`);
+      
       const response = await fetch("/api/get-professor", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ userQuery }),
+        body: JSON.stringify({ 
+          userQuery,
+          sessionId 
+        }),
       });
 
+      const data = await response.json();
+      
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        // For API errors, the response should contain an error message
+        const errorMessage = data.error || `API error (${response.status})`;
+        devLogger.error("API error:", data);
+        throw new Error(errorMessage);
       }
 
-      const data = await response.json();
-      setAnswer(data);
+      // Handle string responses or object responses
+      if (typeof data === 'string') {
+        // Check if the answer indicates no relevant information
+        if (data.includes("don't have enough information")) {
+          setError("No relevant information found for this professor. Try adding a professor first or ask a different question.");
+        } else {
+          setAnswer(data);
+          setError(null);
+        }
+      } else if (data && typeof data === 'object') {
+        // If data is an object, check if it has an error field
+        if (data.error) {
+          throw new Error(data.error);
+        } else if (data.content) {
+          // Some APIs return content in a content field
+          setAnswer(data.content);
+          setError(null);
+        } else {
+          // Otherwise convert the object to a string
+          setAnswer(JSON.stringify(data));
+          setError(null);
+        }
+      }
     } catch (err) {
-      console.error("Error:", err.message);
-      setError(err.message);
+      devLogger.error("Error querying professor:", err);
+      
+      // Show a more user-friendly error
+      if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
+        setError("Network error. Please check your internet connection and try again.");
+      } else if (err.message.includes("OpenAI")) {
+        setError("There was a problem with the AI service. Please try again later.");
+      } else if (err.message.includes("Pinecone") || err.message.includes("embedding")) {
+        setError("There was a problem retrieving professor information. Please try adding the professor again.");
+      } else {
+        setError(`Error: ${err.message}`);
+      }
     } finally {
       setIsQuerying(false);
     }
