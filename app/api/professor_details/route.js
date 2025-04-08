@@ -5,6 +5,12 @@ import { load } from "cheerio";
 // Add configurable logger
 const isDev = process.env.NODE_ENV === 'development';
 
+// Configure Vercel with extended timeout
+export const config = {
+  runtime: 'nodejs',
+  maxDuration: 60, // Extend timeout to 60 seconds
+};
+
 // Create a configurable logger
 const logger = {
   // Always log errors regardless of environment

@@ -126,6 +126,7 @@ export default function Home() {
 
     setIsLoading(true);
     setError(null);
+    
     try {
       const response = await fetch("/api/professor_details", {
         method: "POST",
@@ -135,7 +136,18 @@ export default function Home() {
         body: JSON.stringify({ professorId: extractedId }),
       });
 
-      const data = await response.json();
+      // Get response as text first to handle potential JSON parsing errors
+      const responseText = await response.text();
+      let data;
+      
+      try {
+        // Try to parse the response as JSON
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        // If parsing fails, provide a more helpful error
+        devLogger.error("Failed to parse JSON response:", responseText.substring(0, 200));
+        throw new Error(`Server returned an invalid response. This might be due to a timeout or rate limiting. Please try again later. Error details: ${parseError.message}`);
+      }
 
       if (!response.ok) {
         throw new Error(data.error || `HTTP error! status: ${response.status}`);
@@ -143,6 +155,10 @@ export default function Home() {
 
       const professorInfo = data.professorInfo;
       const feedbacks = data.feedbacks;
+
+      if (!professorInfo || !feedbacks) {
+        throw new Error("Incomplete data received from server. Missing professor information or feedbacks.");
+      }
 
       // Format professorInfo as a comma-separated string
       const professorInfoString = [
@@ -152,10 +168,10 @@ export default function Home() {
         `Number of Ratings: ${professorInfo.numRatings || "0"}`,
         `Would Take Again: ${professorInfo.wouldTakeAgain || "N/A"}`,
         `Difficulty: ${professorInfo.difficulty || "N/A"}`,
-        `Top Tags: ${professorInfo.topTags.join(", ") || "None"}`,
+        `Top Tags: ${(professorInfo.topTags && Array.isArray(professorInfo.topTags)) ? professorInfo.topTags.join(", ") : "None"}`,
       ].join(", ");
 
-      // Format feedbacks as a comma-separated string
+      // Format feedbacks as a comma-separated string with better error handling
       const feedbacksString = feedbacks
         .map((feedback) =>
           [
@@ -164,7 +180,7 @@ export default function Home() {
             `Quality: ${feedback.qualityRating || ""}`,
             `Difficulty: ${feedback.difficultyRating || ""}`,
             `Comments: ${feedback.comments || ""}`,
-            `Tags: ${feedback.tags.join(", ") || "None"}`,
+            `Tags: ${(feedback.tags && Array.isArray(feedback.tags)) ? feedback.tags.join(", ") : "None"}`,
           ].join(", ")
         )
         .join("; ");
@@ -184,7 +200,16 @@ export default function Home() {
       showToast(`Professor ${professorInfo.name} data added successfully!`, "success");
     } catch (err) {
       devLogger.error("Error:", err.message);
-      setError(err.message);
+      
+      // More user-friendly error messages based on error type
+      if (err.message.includes("timeout") || err.message.includes("504")) {
+        setError("The request timed out. The server may be busy or RateMyProfessors might be limiting requests. Please try again later.");
+      } else if (err.message.includes("invalid response") || err.message.includes("JSON")) {
+        setError("Received an invalid response from the server. This might be due to rate limiting by RateMyProfessors. Please try again in a few minutes.");
+      } else {
+        setError(err.message);
+      }
+      
       showToast(`Error: ${err.message}`, "error");
     } finally {
       setIsLoading(false);
@@ -197,11 +222,59 @@ export default function Home() {
     return match ? match[1] : null;
   };
 
+  // Utility function for fetch with retry logic
+  const fetchWithRetry = async (url, options, maxRetries = 3) => {
+    let retries = 0;
+    
+    while (retries < maxRetries) {
+      try {
+        const response = await fetch(url, options);
+        
+        // For non-2xx responses that indicate temporary issues, retry
+        if (!response.ok && (response.status === 429 || response.status === 504 || response.status === 503)) {
+          retries++;
+          
+          // Log the retry attempt
+          devLogger.log(`Request failed with status ${response.status}, retry attempt ${retries}/${maxRetries}`);
+          
+          if (retries >= maxRetries) {
+            return response; // Return the last failed response after max retries
+          }
+          
+          // Calculate delay with exponential backoff: 1s, 2s, 4s, etc. up to 10s max
+          const delay = Math.min(1000 * Math.pow(2, retries - 1), 10000);
+          setProcessingStatus(`Server busy, retrying in ${delay/1000}s... (Attempt ${retries}/${maxRetries})`);
+          
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        
+        return response;
+      } catch (error) {
+        retries++;
+        
+        devLogger.error(`Network error during fetch, retry attempt ${retries}/${maxRetries}:`, error);
+        
+        if (retries >= maxRetries) {
+          throw error; // Throw the last error after max retries
+        }
+        
+        // Calculate delay with exponential backoff
+        const delay = Math.min(1000 * Math.pow(2, retries - 1), 10000);
+        setProcessingStatus(`Network error, retrying in ${delay/1000}s... (Attempt ${retries}/${maxRetries})`);
+        
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  };
+
   const sendToEmbeddingAPI = async (source, professorInfo, feedbacks, isRefresh = false) => {
     try {
       devLogger.log("Preparing data for embedding API...");
       const text = `Professor Information: ${professorInfo}\n\nFeedbacks: ${feedbacks}`;
-      const chunkSize = 5000; // Adjust this value based on your needs
+      
+      // Use smaller chunks for more reliable processing
+      const chunkSize = 4000; // Reduced from 5000 for more reliable processing
       const chunks = [];
 
       for (let i = 0; i < text.length; i += chunkSize) {
@@ -216,7 +289,8 @@ export default function Home() {
         devLogger.log(`Sending chunk ${i + 1}/${chunks.length} to the API...`);
         
         try {
-          const response = await fetch("/api/add-professor", {
+          // Use fetchWithRetry instead of regular fetch
+          const response = await fetchWithRetry("/api/add-professor", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -228,25 +302,35 @@ export default function Home() {
               totalChunks: chunks.length,
               isRefresh: isRefresh // Pass the refresh flag
             }),
-          });
+          }, 3); // Allow up to 3 retries
+
+          // Get response as text first to handle potential JSON parsing errors
+          const responseText = await response.text();
+          let result;
+          
+          try {
+            // Try to parse the response as JSON
+            result = JSON.parse(responseText);
+          } catch (parseError) {
+            devLogger.error(`Failed to parse JSON response for chunk ${i + 1}:`, responseText.substring(0, 200));
+            throw new Error(`Server returned an invalid response for chunk ${i + 1}. This might be due to a timeout or rate limiting.`);
+          }
 
           // Handle non-200 responses
           if (!response.ok) {
-            const errorData = await response.json();
-            devLogger.error(`API error (${response.status}):`, errorData);
+            devLogger.error(`API error (${response.status}):`, result);
             
             // If this is a Pinecone error, show a more helpful message
-            if (errorData.error && (
-                errorData.error.includes("Pinecone") || 
-                errorData.error.includes("index") || 
-                errorData.error.includes("vector"))) {
-              throw new Error(`Database storage error: ${errorData.error}`);
+            if (result.error && (
+                result.error.includes("Pinecone") || 
+                result.error.includes("index") || 
+                result.error.includes("vector"))) {
+              throw new Error(`Database storage error: ${result.error}`);
             } else {
-              throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error || "Unknown error"}`);
+              throw new Error(`HTTP error! status: ${response.status}, message: ${result.error || "Unknown error"}`);
             }
           }
 
-          const result = await response.json();
           devLogger.log(`Chunk ${i + 1}/${chunks.length} processed:`, result);
           
           // If there are multiple chunks, show progress
@@ -256,11 +340,19 @@ export default function Home() {
           
           // Add a small delay between requests to avoid overwhelming the API
           if (i < chunks.length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            const delay = 2000; // Increased delay to 2 seconds
+            setProcessingStatus(`Processed chunk ${i + 1}/${chunks.length}, waiting ${delay/1000}s before next chunk...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
           }
         } catch (chunkError) {
           devLogger.error(`Error processing chunk ${i + 1}:`, chunkError);
-          throw new Error(`Error processing chunk ${i + 1}: ${chunkError.message}`);
+          
+          // Provide a more descriptive error
+          if (chunkError.message.includes("timeout") || chunkError.message.includes("504")) {
+            throw new Error(`Timeout processing chunk ${i + 1}. The server may be busy. Try again later or try with a different professor.`);
+          } else {
+            throw new Error(`Error processing chunk ${i + 1}: ${chunkError.message}`);
+          }
         }
       }
 
@@ -272,8 +364,12 @@ export default function Home() {
       // Provide more specific error messages based on the error
       if (error.message.includes("Failed to fetch") || error.message.includes("NetworkError")) {
         setError("Network error when saving professor data. Please check your internet connection and try again.");
+      } else if (error.message.includes("timeout") || error.message.includes("504")) {
+        setError("The request timed out. The server may be busy or RateMyProfessors might be limiting requests. Please try again later.");
       } else if (error.message.includes("Pinecone") || error.message.includes("index") || error.message.includes("Database storage")) {
         setError(`Database error: ${error.message}. The system admin has been notified.`);
+      } else if (error.message.includes("invalid response") || error.message.includes("JSON")) {
+        setError("Received an invalid response from the server. This might be due to rate limiting. Please try again in a few minutes.");
       } else {
         setError(`Error: ${error.message}`);
       }

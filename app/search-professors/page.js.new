@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import DynamicNavbar from "../components/DynamicNavbar";
 import { motion, AnimatePresence } from "framer-motion";
 import { Star, ThumbsUp, Book, X, Search, Filter, SortAsc, Loader, School, Award, RefreshCw, Plus, PlusCircle, Scale } from "lucide-react";
@@ -735,51 +735,42 @@ export default function Professors() {
   const [toastMessage, setToastMessage] = useState(null);
 
   // Add state to store the count data
-  const [countData, setCountData] = useState({ pagination: { total: 0 } });
+  const [countData, setCountData] = useState(null);
 
-  // Add state for departments
-  const [departments, setDepartments] = useState([]); 
-
-  // Display professors count - using memoization to avoid render-phase calculations
+  // Display professors count - moved inside the component to access state variables
   const ProfessorCount = () => {
-    // Use useMemo to cache the calculation results
-    const displayInfo = useMemo(() => {
-      // Fetch data directly from state updated by API response
-      const totalDisplayed = professors.length; // Professors on the current page
-      const totalFilteredCount = countData?.pagination?.total || 0; // Total professors matching filters
-
-      // Check if any filters are applied
-      const isFiltered = searchTerm || departmentFilter || ratingFilter > 0;
-
-      return {
-        totalDisplayed,
-        totalFilteredCount,
-        isFiltered
-      };
-    }, [professors, countData, searchTerm, departmentFilter, ratingFilter]); // Dependencies updated
-
+    // Get current page professors from the filteredProfessors
+    const currentProfessors = getCurrentProfessors();
+    const totalDisplayed = currentProfessors.length;
+    const filteredCount = filteredProfessors.length;
+    const totalCount = countData?.pagination?.total || professors.length;
+    
+    // Check if any filters are applied
+    const isFiltered = searchTerm || departmentFilter || ratingFilter > 0;
+    
     return (
-      <div className="bg-indigo-900/40 backdrop-blur-sm px-5 py-4 rounded-xl text-center mb-6 border-2 border-indigo-500/50 shadow-lg">
-        <div className="flex items-center justify-center mb-1">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-300 mr-2" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-          </svg>
-          <span className="text-indigo-100 font-semibold text-sm">PROFESSOR COUNT</span>
-        </div>
-        <span className="text-indigo-100 font-medium text-lg">
-          {/* Show "Showing X of Y" only when there are multiple pages */}
-          {totalPages > 1 && `Showing ${displayInfo.totalDisplayed} of `}
-
-          {/* Total professors count matching filters */}
-          {displayInfo.totalFilteredCount} professors
-
-          {/* Filter descriptions */}
+      <div className="text-center mb-6">
+        <span className="text-indigo-300">
+          {/* When viewing a page with pagination */}
+          {totalPages > 1 && `Showing ${totalDisplayed} of `}
+          
+          {/* Total professors count - with filter context if filtered */}
+          {filteredCount} professors
+          
+          {/* If search term is applied */}
           {searchTerm && ` matching "${searchTerm}"`}
+          
+          {/* If department filter is applied */}
           {departmentFilter && ` in "${departmentFilter}"`}
+          
+          {/* If rating filter is applied */}
           {ratingFilter > 0 && ` rated ${ratingFilter}+`}
-
-          {/* Page info */}
-          {totalPages > 1 && ` (page ${currentPage} of ${totalPages})`}
+          
+          {/* Only show "filtered from total" when actual filters are applied */}
+          {isFiltered && filteredCount < totalCount && ` (filtered from ${totalCount} total)`}
+          
+          {/* When only pagination is active (no filters) */}
+          {!isFiltered && totalPages > 1 && ` (page ${currentPage} of ${totalPages})`}
         </span>
       </div>
     );
@@ -793,31 +784,70 @@ export default function Professors() {
   };
 
   useEffect(() => {
-    // Initial fetch when component mounts
-    fetchProfessors(1, { 
-      searchTerm: '', 
-      departmentFilter: '', 
-      ratingFilter: 0 
-    });
+    fetchProfessors();
   }, []);
 
-  async function fetchProfessors(page = currentPage, filters = { searchTerm, departmentFilter, ratingFilter }) {
+  useEffect(() => {
+    // Apply all filters
+    let filtered = professors;
+    
+    // Apply search term filter
+    if (searchTerm) {
+      filtered = filtered.filter(
+        (professor) =>
+          professor.metadata.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          professor.metadata.department.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    
+    // Apply department filter
+    if (departmentFilter) {
+      filtered = filtered.filter(
+        (professor) =>
+          professor.metadata.department.toLowerCase().includes(departmentFilter.toLowerCase())
+      );
+    }
+    
+    // Apply rating filter
+    if (ratingFilter > 0) {
+      filtered = filtered.filter(
+        (professor) => professor.metadata.overallRating >= ratingFilter
+      );
+    }
+    
+    setFilteredProfessors(filtered);
+    
+    // Reset to first page when filters change
+    setCurrentPage(1);
+    
+    // Calculate total pages
+    setTotalPages(Math.ceil(filtered.length / professorsPerPage));
+  }, [searchTerm, departmentFilter, ratingFilter, professors, professorsPerPage]);
+
+  // Get unique departments for filter dropdown
+  const departments = [...new Set(professors.map(p => p.metadata.department))];
+
+  async function fetchProfessors() {
     try {
       setLoading(true);
-      setError(null); // Clear previous errors
-
-      // Construct query parameters including pagination and filters
-      const params = new URLSearchParams({
-        page: page.toString(),
-        pageSize: professorsPerPage.toString(),
+      
+      // First, fetch all professors count with a special parameter to get the total count only
+      const countResponse = await fetch(`/api/get-professor?countOnly=true`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
       });
-      if (filters.searchTerm) params.set('search', filters.searchTerm);
-      if (filters.departmentFilter) params.set('department', filters.departmentFilter);
-      if (filters.ratingFilter > 0) params.set('minRating', filters.ratingFilter.toString());
 
-      console.log(`Fetching professors with params: ${params.toString()}`); // Debug log
+      if (!countResponse.ok) {
+        throw new Error(`HTTP error! Status: ${countResponse.status}`);
+      }
 
-      const response = await fetch(`/api/get-professor?${params.toString()}`, {
+      const countData = await countResponse.json();
+      setCountData(countData);
+      
+      // Now fetch the current page of data
+      const response = await fetch(`/api/get-professor?page=${currentPage}&pageSize=${professorsPerPage}`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -825,71 +855,42 @@ export default function Professors() {
       });
 
       if (!response.ok) {
-        // Try to get error details from response body
-        let errorBody = "Could not retrieve error details.";
-        try {
-          errorBody = await response.text();
-        } catch (e) { /* ignore error parsing body */ }
-        throw new Error(`HTTP error! Status: ${response.status}. Details: ${errorBody}`);
+        throw new Error(`HTTP error! Status: ${response.status}`);
       }
 
       const data = await response.json();
 
-      // API should return professors and pagination info reflecting filters
-      if (data.professors && Array.isArray(data.professors) && data.pagination) {
+      // The API now returns an object with professors array and pagination info
+      if (data.professors && Array.isArray(data.professors)) {
         setProfessors(data.professors);
-        // We need to set filteredProfessors to the same data, since the UI relies on this state
         setFilteredProfessors(data.professors);
-
-        // Update count data and total pages based on the API response (which reflects filters)
-        setCountData(data); // Assuming data structure is { professors: [], pagination: { total: ..., page: ..., totalPages: ... } }
-        setTotalPages(data.pagination.totalPages || 1); // Use totalPages from API
-
-        // Log counts reflecting filtered results
-        console.log(`API returned ${data.professors.length} professors for page ${data.pagination.page}. Total matching filters: ${data.pagination.total}`);
         
-        // Extract unique departments from this data for the department filter dropdown
-        if (data.professors.length > 0) {
-          const uniqueDepartments = [...new Set(data.professors.map(p => p.metadata.department).filter(Boolean))];
-          setDepartments(uniqueDepartments);
-        }
+        // Use count from the countOnly request for total professors
+        const totalCount = countData.pagination?.total || data.pagination.total;
+        const totalPagesCount = Math.ceil(totalCount / professorsPerPage);
+        
+        // Update pagination state from the API response
+        setTotalPages(totalPagesCount);
+        
+        // Log the total number of professors in the database
+        console.log(`Found ${totalCount} total professors in the database`);
+        console.log(`Viewing page ${data.pagination.page} of ${totalPagesCount}`);
       } else {
+        // Handle case where data structure is unexpected
         console.error("Invalid data structure received:", data);
-        setError("Received invalid data structure from the server.");
-        setProfessors([]); // Clear professors on error
-        setFilteredProfessors([]); // Also clear filteredProfessors
-        setCountData({ pagination: { total: 0 } });
-        setTotalPages(1);
+        setError("Received invalid data structure from the server");
       }
     } catch (err) {
-      console.error("Error fetching professors:", err); // Log the full error
-      setError(err.message || "An unexpected error occurred.");
-      setProfessors([]); // Clear professors on error
-      setFilteredProfessors([]); // Also clear filteredProfessors
-      setCountData({ pagination: { total: 0 } });
-      setTotalPages(1);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   }
 
-  // Update useEffect to refetch when page or filters change
+  // Update useEffect to refetch when page changes
   useEffect(() => {
-    // Only refetch if this effect runs after filters have changed
-    if (currentPage !== undefined) { // This check ensures we're not in the initial render
-      // Reset to page 1 whenever filters change, otherwise fetch current page
-      const isFilterChange = searchTerm || departmentFilter || ratingFilter > 0;
-      const pageToFetch = isFilterChange ? 1 : currentPage;
-      if(isFilterChange) {
-        setCurrentPage(1); // Reset page state when filters change
-      }
-      fetchProfessors(pageToFetch, { 
-        searchTerm: searchTerm, 
-        departmentFilter: departmentFilter, 
-        ratingFilter: ratingFilter 
-      });
-    }
-  }, [currentPage, professorsPerPage, searchTerm, departmentFilter, ratingFilter]);
+    fetchProfessors();
+  }, [currentPage, professorsPerPage]);
 
   // Pagination functions
   const goToNextPage = () => {
@@ -915,9 +916,9 @@ export default function Professors() {
 
   // Get the current page of professors
   const getCurrentProfessors = () => {
-    // Since we've moved filtering to the server side,
-    // we should simply return professors which are already properly paginated
-    return professors;
+    const indexOfLastProfessor = currentPage * professorsPerPage;
+    const indexOfFirstProfessor = indexOfLastProfessor - professorsPerPage;
+    return filteredProfessors.slice(indexOfFirstProfessor, indexOfLastProfessor);
   };
 
   // Pagination display component
@@ -1018,20 +1019,19 @@ export default function Professors() {
     let sorted;
     
     if (criteria === "name") {
-      sorted = [...professors].sort((a, b) => 
+      sorted = [...filteredProfessors].sort((a, b) => 
         a.metadata.name.localeCompare(b.metadata.name)
       );
     } else if (criteria === "department") {
-      sorted = [...professors].sort((a, b) => 
+      sorted = [...filteredProfessors].sort((a, b) => 
         a.metadata.department.localeCompare(b.metadata.department)
       );
     } else {
-      sorted = [...professors].sort(
+      sorted = [...filteredProfessors].sort(
         (a, b) => b.metadata[criteria] - a.metadata[criteria]
       );
     }
     
-    setProfessors(sorted);
     setFilteredProfessors(sorted);
   };
 
@@ -1245,10 +1245,8 @@ export default function Professors() {
                     className="w-full px-3 py-2 rounded-lg bg-white/10 text-white border border-indigo-500/30 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   >
                     <option value="" className="bg-gray-800 text-white">All Departments</option>
-                    {departments.map((department, index) => (
-                      <option key={index} value={department} className="bg-gray-800 text-white">
-                        {department}
-                      </option>
+                    {departments.map((dept, i) => (
+                      <option key={i} value={dept} className="bg-gray-800 text-white">{dept}</option>
                     ))}
                   </select>
                 </div>
@@ -1281,15 +1279,27 @@ export default function Professors() {
           )}
           
           <div className="text-indigo-200 text-sm mt-2">
-            {professors.length} {professors.length === 1 ? 'professor' : 'professors'} {searchTerm ? 'matching your search' : 'displayed'}
-            {countData?.pagination?.total && professors.length !== countData.pagination.total && ` (out of ${countData.pagination.total} total)`}
+            {filteredProfessors.length} {filteredProfessors.length === 1 ? 'professor' : 'professors'} {searchTerm ? 'matching your search' : 'displayed'}
+            {countData?.pagination?.total && filteredProfessors.length !== countData.pagination.total && ` (out of ${countData.pagination.total} total)`}
+          </div>
+
+          <div className="text-indigo-200 text-sm mt-2">
+            {filteredProfessors.length} {filteredProfessors.length === 1 ? 'professor' : 'professors'} 
+            {searchTerm ? 'matching your search' : ''}
+            {departmentFilter ? ` in "${departmentFilter}"` : ''}
+            {ratingFilter > 0 ? ` rated ${ratingFilter}+` : ''}
+            {(searchTerm || departmentFilter || ratingFilter > 0) && 
+              countData?.pagination?.total && 
+              filteredProfessors.length !== countData.pagination.total && 
+              ` (out of ${countData.pagination.total} total)`
+            }
           </div>
         </div>
         
         {/* Display professors count */}
         <ProfessorCount />
         
-        {professors.length > 0 ? (
+        {filteredProfessors.length > 0 ? (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {getCurrentProfessors().map((professor, index) => (

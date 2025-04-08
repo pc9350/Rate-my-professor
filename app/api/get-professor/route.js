@@ -276,52 +276,210 @@ function parseProfessorInfo(text) {
   return professorInfo;
 }
 
-async function getProfessors() {
-  const index = pinecone.Index("professors-index");
+async function getProfessors(page = 1, pageSize = 300, noLimit = false, countOnly = false, filters = {}) {
+  try {
+    const index = pinecone.Index("professors-index");
 
-  // Fetch more professors (increasing from 100 to 300)
-  const queryResponse = await index.query({
-    vector: await getEmbedding("professor"),
-    topK: 300,
-    includeMetadata: true,
-  });
+    // When getting count, use a high limit to get more accurate numbers
+    const queryLimit = countOnly ? 1000 : (noLimit ? Math.min(1000, pageSize * 5) : 1000); // Get more data for client-side filtering
+    
+    // First, query the total count to understand pagination limits
+    const statsResponse = await index.describeIndexStats();
+    const totalVectors = statsResponse?.totalVectorCount || 0;
+    const estimatedTotalProfessors = Math.min(totalVectors, 1000); // Cap at 1000 for performance
+    
+    logger.log(`Total vectors in index: ${totalVectors}, estimated professors: ${estimatedTotalProfessors}, query limit: ${queryLimit}`);
+    logger.log(`Applied filters: ${JSON.stringify(filters)}`);
 
-  const processedProfessors = queryResponse.matches
-    .map((match) => ({
-      id: match.id,
-      score: match.score,
-      metadata: parseProfessorInfo(match.metadata.text),
-    }))
-    .filter(
-      (prof) =>
-        prof.metadata.name &&
-        prof.metadata.department &&
-        prof.metadata.overallRating !== null &&
-        prof.metadata.numberOfRatings !== null
+    // Fetch professors with the determined limit
+    const queryResponse = await index.query({
+      vector: await getEmbedding("professor"),
+      topK: queryLimit,
+      includeMetadata: true,
+    });
+
+    logger.log(`Retrieved ${queryResponse.matches?.length || 0} professor vectors from Pinecone`);
+
+    // Process the professors - simplified if countOnly
+    let processedProfessors = [];
+    if (!countOnly) {
+      // Only do full processing if we need the actual data
+      processedProfessors = queryResponse.matches
+        .map((match) => ({
+          id: match.id,
+          score: match.score,
+          metadata: parseProfessorInfo(match.metadata.text),
+        }))
+        .filter(
+          (prof) =>
+            prof.metadata.name &&
+            prof.metadata.department &&
+            prof.metadata.overallRating !== null &&
+            prof.metadata.numberOfRatings !== null
+        );
+    } else {
+      // For countOnly, just check if each entry has valid data
+      processedProfessors = queryResponse.matches
+        .map((match, index) => {
+          try {
+            const metadata = parseProfessorInfo(match.metadata.text);
+            return metadata.name ? { 
+              id: match.id,
+              score: match.score,
+              // Just capture name for deduplication, we don't need full data
+              metadata: { name: metadata.name }
+            } : null;
+          } catch (err) {
+            return null;
+          }
+        })
+        .filter(Boolean); // Remove any null entries
+    }
+
+    logger.log(`Processed ${processedProfessors.length} valid professors after filtering`);
+
+    // Deduplicate professors by name
+    const uniqueProfessors = Array.from(
+      new Map(
+        processedProfessors.map((item) => [item.metadata.name, item])
+      ).values()
     );
 
-  const uniqueProfessors = Array.from(
-    new Map(
-      processedProfessors.map((item) => [item.metadata.name, item])
-    ).values()
-  );
+    logger.log(`Deduplicated to ${uniqueProfessors.length} unique professors`);
 
-  const sortedProfessors = uniqueProfessors.sort(
-    (a, b) => b.metadata.overallRating - a.metadata.overallRating
-  );
+    // Apply filters before pagination
+    let filteredProfessors = [...uniqueProfessors];
+    
+    // Apply search filter if provided (match name or department)
+    if (filters.search && filters.search.trim() !== '') {
+      const searchTerm = filters.search.toLowerCase().trim();
+      logger.log(`Applying search filter: "${searchTerm}"`);
+      filteredProfessors = filteredProfessors.filter(
+        (prof) => 
+          (prof.metadata.name && prof.metadata.name.toLowerCase().includes(searchTerm)) ||
+          (prof.metadata.department && prof.metadata.department.toLowerCase().includes(searchTerm))
+      );
+      logger.log(`After search filter: ${filteredProfessors.length} professors`);
+    }
+    
+    // Apply department filter if provided
+    if (filters.department && filters.department.trim() !== '') {
+      const departmentTerm = filters.department.toLowerCase().trim();
+      logger.log(`Applying department filter: "${departmentTerm}"`);
+      filteredProfessors = filteredProfessors.filter(
+        (prof) => 
+          prof.metadata.department && 
+          prof.metadata.department.toLowerCase().includes(departmentTerm)
+      );
+      logger.log(`After department filter: ${filteredProfessors.length} professors`);
+    }
+    
+    // Apply minimum rating filter if provided
+    if (filters.minRating && !isNaN(parseFloat(filters.minRating))) {
+      const minRating = parseFloat(filters.minRating);
+      logger.log(`Applying minimum rating filter: ${minRating}`);
+      filteredProfessors = filteredProfessors.filter(
+        (prof) => 
+          prof.metadata.overallRating && 
+          prof.metadata.overallRating >= minRating
+      );
+      logger.log(`After rating filter: ${filteredProfessors.length} professors`);
+    }
 
-  // Return all professors instead of limiting to 30
-  return sortedProfessors;
+    // If countOnly, we can stop here - we just need the count
+    if (countOnly) {
+      return {
+        professors: [],
+        pagination: {
+          total: filteredProfessors.length,  // Return filtered count
+          page: 1,
+          pageSize: pageSize,
+          totalPages: Math.ceil(filteredProfessors.length / pageSize),
+          hasMore: filteredProfessors.length > pageSize
+        }
+      };
+    }
+
+    // Sort professors by overall rating
+    const sortedProfessors = filteredProfessors.sort(
+      (a, b) => b.metadata.overallRating - a.metadata.overallRating
+    );
+
+    // Calculate pagination info
+    const totalProfessors = sortedProfessors.length;
+    const totalPages = Math.ceil(totalProfessors / pageSize);
+    const currentPage = page > totalPages ? (totalPages > 0 ? 1 : page) : page;
+    const startIndex = (currentPage - 1) * pageSize;
+    const endIndex = Math.min(startIndex + pageSize, totalProfessors);
+    
+    // If noLimit is true, return all professors
+    // Otherwise return the paginated subset
+    const paginatedProfessors = noLimit 
+      ? sortedProfessors 
+      : sortedProfessors.slice(startIndex, endIndex);
+    
+    logger.log(`Returning ${paginatedProfessors.length} professors for page ${currentPage}/${totalPages}`);
+
+    // Return both the professors and pagination metadata
+    return {
+      professors: paginatedProfessors,
+      pagination: {
+        total: totalProfessors,
+        page: currentPage,
+        pageSize: pageSize,
+        totalPages: totalPages,
+        hasMore: currentPage < totalPages
+      }
+    };
+  } catch (error) {
+    logger.error("Error in getProfessors:", error);
+    throw error;
+  }
 }
 
-export async function GET() {
+export async function GET(request) {
   try {
-    const professors = await getProfessors();
-    return NextResponse.json(professors);
+    // Extract pagination parameters from URL query string
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const pageSize = parseInt(searchParams.get('pageSize') || '24', 10);
+    
+    // Validate pagination parameters
+    const validatedPage = page > 0 ? page : 1;
+    const validatedPageSize = Math.min(Math.max(pageSize, 10), 100); // Between 10 and 100
+    
+    // Get all professors flag
+    const getAllProfessors = searchParams.get('all') === 'true';
+    
+    // New parameter: countOnly - efficiently get just the count
+    const countOnly = searchParams.get('countOnly') === 'true';
+    
+    // Extract filter parameters
+    const filters = {
+      search: searchParams.get('search') || '',
+      department: searchParams.get('department') || '',
+      minRating: searchParams.get('minRating') || 0
+    };
+    
+    logger.log(`GET request for professors - page: ${validatedPage}, pageSize: ${validatedPageSize}, getAll: ${getAllProfessors}, countOnly: ${countOnly}`);
+    logger.log(`Filter parameters: ${JSON.stringify(filters)}`);
+    
+    // Get professors with appropriate parameters
+    const result = await getProfessors(validatedPage, validatedPageSize, getAllProfessors, countOnly, filters);
+    
+    // For count-only requests, we can just return the pagination info
+    if (countOnly) {
+      return NextResponse.json({
+        pagination: result.pagination
+      });
+    }
+    
+    // Otherwise return the full result with professors data
+    return NextResponse.json(result);
   } catch (error) {
-    logger.error("Error fetching top professors:", error);
+    logger.error("Error fetching professors:", error);
     return NextResponse.json(
-      { error: "An error occurred while fetching the top professors." },
+      { error: "An error occurred while fetching professors." },
       { status: 500 }
     );
   }
@@ -639,11 +797,11 @@ export async function POST(req) {
           // Use the existing getProfessors function to get a consistent list
           const topProfessors = await getProfessors();
           
-          if (topProfessors && topProfessors.length > 0) {
-            logger.log(`Found ${topProfessors.length} professors to display`);
+          if (topProfessors && topProfessors.professors.length > 0) {
+            logger.log(`Found ${topProfessors.professors.length} professors to display`);
             
             // Create a formatted response with professor information
-            const professorsList = topProfessors
+            const professorsList = topProfessors.professors
               .slice(0, 10) // Limit to top 10 professors
               .map((prof, index) => {
                 return `${index + 1}. Professor ${prof.metadata.name} (${prof.metadata.department}), Overall Rating: ${prof.metadata.overallRating}`;
@@ -655,7 +813,7 @@ export async function POST(req) {
             
             // Return this as a special case
             const listResponse = {
-              content: `I don't have information about which specific professor you're asking about. ${topProfessors.length > 0 ? 'Here are some professors in our database:' : ''}\n\n${professorsList}\n\nTo get detailed information, please specify which professor you're interested in.`,
+              content: `I don't have information about which specific professor you're asking about. ${topProfessors.professors.length > 0 ? 'Here are some professors in our database:' : ''}\n\n${professorsList}\n\nTo get detailed information, please specify which professor you're interested in.`,
               role: "assistant"
             };
             

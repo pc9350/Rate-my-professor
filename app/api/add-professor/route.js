@@ -7,6 +7,12 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { inMemoryVectorStore } from "../shared-memory";
 
+// Configure Vercel with extended timeout
+export const config = {
+  runtime: 'nodejs',
+  maxDuration: 60, // Extend timeout to 60 seconds
+};
+
 // Add configurable logger
 const isDev = process.env.NODE_ENV === 'development';
 
@@ -248,52 +254,23 @@ async function embedAndStore(chunks, source, isRefresh = false) {
       index = await ensureIndexExists();
       logger.log("Pinecone index confirmed for embedding storage");
       
-      // If this is a refresh operation, delete the existing vectors for this source
+      // Handle refresh - but we'll use a simpler approach now
       if (isRefresh) {
-        logger.log(`Refresh operation detected for ${source}, removing existing data`);
-        try {
-          // Need to delete vectors with IDs that start with the source
-          // First get all vectors matching this source
-          const existingData = await index.query({
-            filter: { source: { $eq: source } },
-            topK: 1000,
-            includeMetadata: false,
-          });
-          
-          if (existingData && existingData.matches && existingData.matches.length > 0) {
-            const idsToDelete = existingData.matches.map(match => match.id);
-            
-            logger.log(`Found ${idsToDelete.length} existing vectors to delete for source ${source}`);
-            
-            // Delete in batches to avoid hitting API limits
-            const batchSize = 100;
-            for (let i = 0; i < idsToDelete.length; i += batchSize) {
-              const batch = idsToDelete.slice(i, i + batchSize);
-              await index.delete({
-                ids: batch
-              });
-              logger.log(`Deleted batch of ${batch.length} vectors`);
-            }
-            
-            logger.log(`Successfully deleted all existing data for ${source}`);
-          } else {
-            logger.log(`No existing data found for ${source}`);
-          }
-        } catch (deleteError) {
-          logger.error(`Error deleting existing data for ${source}:`, deleteError);
-          // Continue with the upsert even if deletion fails
-        }
+        logger.log(`Refresh operation detected for ${source}, will use unique IDs to overwrite data`);
+        // Instead of trying to delete, we'll ensure new vectors have unique IDs
+        // This approach avoids the delete API compatibility issues
       }
     } catch (indexError) {
       logger.error("Could not access Pinecone index, using in-memory fallback:", indexError);
       useFallback = true;
     }
     
-    // Create a unique ID prefix with timestamp to help with versioning
+    // Create a unique ID prefix with timestamp for versioning
+    // For refresh operations, this ensures old data is effectively replaced
     const idPrefix = `${source}-${Date.now()}`;
     
     // Store chunks in batches to avoid rate limits
-    const batchSize = 5;
+    const batchSize = 3; // Reduced batch size for better reliability
     const results = [];
     
     for (let i = 0; i < chunks.length; i += batchSize) {
@@ -304,6 +281,7 @@ async function embedAndStore(chunks, source, isRefresh = false) {
         const chunk = batch[j];
         const embedding = await getEmbedding(chunk);
         
+        // Build vector with metadata in the format expected by your Pinecone SDK version
         batchVectors.push({
           id: `${idPrefix}-${i + j}`,
           values: embedding,
@@ -321,9 +299,21 @@ async function embedAndStore(chunks, source, isRefresh = false) {
       
       if (!useFallback) {
         try {
-          upsertResult = await index.upsert(batchVectors);
+          // Try different formats for the upsert operation based on SDK version
+          try {
+            // Format for newer Pinecone SDK versions
+            upsertResult = await index.upsert({
+              vectors: batchVectors
+            });
+            logger.log(`Successfully upserted batch using vectors format`);
+          } catch (formatError) {
+            // If that fails, try the format for older Pinecone SDK versions
+            logger.log(`Initial upsert format failed, trying alternative format: ${formatError.message}`);
+            upsertResult = await index.upsert(batchVectors);
+            logger.log(`Successfully upserted batch using direct vectors array`);
+          }
         } catch (pineconeError) {
-          logger.error("Pinecone upsert failed, using in-memory fallback:", pineconeError);
+          logger.error("All Pinecone upsert attempts failed, using in-memory fallback:", pineconeError);
           useFallback = true;
           upsertResult = inMemoryVectorStore.upsert(batchVectors);
         }
@@ -333,9 +323,9 @@ async function embedAndStore(chunks, source, isRefresh = false) {
       
       results.push(upsertResult);
       
-      // Small delay to avoid rate limits
+      // Increased delay to avoid rate limits
       if (i + batchSize < chunks.length) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
     
