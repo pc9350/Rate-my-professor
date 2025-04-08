@@ -2,10 +2,37 @@ import { NextResponse } from "next/server";
 import axios from "axios";
 import { load } from "cheerio";
 
+// Add configurable logger
+const isDev = process.env.NODE_ENV === 'development';
+
+// Create a configurable logger
+const logger = {
+  // Always log errors regardless of environment
+  error: (...args) => console.error(...args),
+  
+  // Only log info in development or if forced
+  log: (...args) => {
+    if (isDev || process.env.FORCE_SERVER_LOGS === 'true') {
+      console.log(...args);
+    }
+  },
+  
+  // Debug level logs - only in development
+  debug: (...args) => {
+    if (isDev) {
+      console.log('[DEBUG]', ...args);
+    }
+  },
+  
+  // Critical logs that should always appear
+  critical: (...args) => console.log('[CRITICAL]', ...args)
+};
+
 export async function POST(request) {
   try {
     const { professorId } = await request.json();
     if (!professorId) {
+      logger.log("Missing professorId in request");
       return NextResponse.json(
         { error: "Professor ID or URL is required" },
         { status: 400 }
@@ -16,7 +43,7 @@ export async function POST(request) {
       ? professorId
       : `https://www.ratemyprofessors.com/professor/${professorId}`;
 
-    console.log("Fetching page content...");
+    logger.log(`Fetching data from URL: ${professorUrl}`);
     
     // Configure axios with headers to mimic a real browser
     const response = await axios.get(professorUrl, {
@@ -27,6 +54,7 @@ export async function POST(request) {
         'Cache-Control': 'no-cache',
         'Pragma': 'no-cache',
       },
+      timeout: 15000, // 15 second timeout
     });
     
     const html = response.data;
@@ -62,6 +90,8 @@ export async function POST(request) {
         [],
     };
 
+    logger.debug("Extracted professor info:", professorInfo);
+
     // Extract feedbacks (ratings)
     let feedbacks = [];
     
@@ -77,7 +107,7 @@ export async function POST(request) {
     for (const selector of ratingSelectors) {
       ratingsElements = $(selector);
       if (ratingsElements.length > 0) {
-        console.log(`Found ${ratingsElements.length} ratings with selector: ${selector}`);
+        logger.log(`Found ${ratingsElements.length} ratings with selector: ${selector}`);
         break;
       }
     }
@@ -129,21 +159,44 @@ export async function POST(request) {
       });
     });
 
+    // Clean up duplicate course names in the feedbacks
+    feedbacks.forEach(feedback => {
+      if (feedback.course) {
+        // Clean up duplicated course names (e.g., "INTEREGR170 INTEREGR170" → "INTEREGR170") 
+        feedback.course = feedback.course.replace(/(\b\w+\b) \1\b/g, '$1').trim();
+      }
+      
+      if (feedback.date) {
+        // Clean up duplicated dates (e.g., "Apr 7th, 2025Apr 7th, 2025" → "Apr 7th, 2025")
+        // First try splitting after year
+        const dateSegments = feedback.date.split(/(?<=\d{4})/);
+        if (dateSegments.length > 1 && dateSegments[0] === dateSegments[1]) {
+          feedback.date = dateSegments[0].trim();
+        } else {
+          // More general approach using regex
+          feedback.date = feedback.date.replace(/(\b\w+ \d+\w+, \d{4})\1/g, '$1').trim();
+        }
+      }
+    });
+
     // Instead of trying to load more pages, let's just add a note if we detect a "load more" button
     const hasMoreRatings = $(".PaginationButton__StyledPaginationButton-txi1dr-1").length > 0 || 
                          $("[data-testid='PaginationButton']").length > 0;
                          
     if (hasMoreRatings) {
-      console.log("More ratings are available but not loaded - consider implementing pagination");
+      logger.log("More ratings are available but not loaded - consider implementing pagination");
     }
 
     if (!professorInfo.name || professorInfo.name === "Unknown") {
+      logger.log("Professor not found with ID:", professorId);
       return NextResponse.json(
         { error: "Professor not found" },
         { status: 404 }
       );
     }
 
+    logger.log(`Successfully scraped data for professor: ${professorInfo.name}`);
+    
     // Add a field indicating if there are more ratings
     return NextResponse.json({ 
       professorInfo, 
@@ -152,10 +205,31 @@ export async function POST(request) {
     });
     
   } catch (error) {
-    console.error("Error scraping data:", error.message);
+    logger.error("Error scraping data:", error);
+    
+    // Provide more specific error messages based on the error
+    let errorMessage = "Failed to scrape data";
+    let statusCode = 500;
+    
+    if (error.code === 'ECONNABORTED') {
+      errorMessage = "Request timed out. The server might be experiencing high load.";
+    } else if (error.code === 'ENOTFOUND') {
+      errorMessage = "Could not connect to RateMyProfessors. Please check your internet connection.";
+    } else if (error.response) {
+      // The request was made and the server responded with a status code
+      statusCode = error.response.status;
+      if (statusCode === 404) {
+        errorMessage = "Professor not found on RateMyProfessors.";
+      } else if (statusCode === 403) {
+        errorMessage = "Access to RateMyProfessors is forbidden. They might be blocking our requests.";
+      } else {
+        errorMessage = `RateMyProfessors responded with status code ${statusCode}`;
+      }
+    }
+    
     return NextResponse.json(
-      { error: "Failed to scrape data", details: error.message },
-      { status: 500 }
+      { error: errorMessage, details: error.message },
+      { status: statusCode }
     );
   }
 }

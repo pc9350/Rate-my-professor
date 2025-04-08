@@ -129,7 +129,7 @@ function parseProfessorInfo(text) {
   const numberOfRatingsMatch = text.match(/Number of Ratings:\s*(\d+)/);
   const wouldTakeAgainMatch = text.match(/Would Take Again:\s*([\d%]+)/);
   const difficultyMatch = text.match(/Difficulty:\s*([\d.]+)/);
-  const topTagsMatch = text.match(/Top Tags:\s*(.*)/);
+  const topTagsMatch = text.match(/Top Tags:\s*(.*?)(?:,\s*Feedbacks:|$)/);
 
   professorInfo.name = nameMatch ? nameMatch[1] : null;
   professorInfo.department = departmentMatch ? departmentMatch[1] : null;
@@ -149,15 +149,140 @@ function parseProfessorInfo(text) {
     ? topTagsMatch[1].split(",").map((tag) => tag.trim())
     : [];
 
+  // Extract courses information from Feedbacks
+  const feedbacks = [];
+  const feedbacksMatch = text.match(/Feedbacks:\s*(.*?)$/s);
+  
+  // Add debug logging if professor is Tracy Puccinelli
+  const isTracyPuccinelli = professorInfo.name && professorInfo.name.toLowerCase().includes('tracy puccinelli');
+  if (isTracyPuccinelli) {
+    logger.log("Processing Tracy Puccinelli's feedbacks");
+    logger.log("Feedback text:", feedbacksMatch ? feedbacksMatch[1].substring(0, 500) + "..." : "No feedbacks found");
+  }
+  
+  if (feedbacksMatch && feedbacksMatch[1]) {
+    const feedbacksText = feedbacksMatch[1];
+    const feedbackEntries = feedbacksText.split(';');
+    
+    feedbackEntries.forEach((entry, index) => {
+      if (isTracyPuccinelli) {
+        logger.log(`Processing feedback entry ${index + 1}:`, entry.substring(0, 100) + "...");
+      }
+      
+      const courseMatch = entry.match(/Course:\s*(.*?)(?:,|$)/);
+      if (courseMatch && courseMatch[1] && courseMatch[1].trim()) {
+        // Enhanced course name cleaning
+        let courseName = courseMatch[1].trim();
+        
+        // Log original course name for debugging Tracy's data
+        if (isTracyPuccinelli) {
+          logger.log(`Original course name: "${courseName}"`);
+        }
+        
+        // Remove duplicate course codes (e.g., "CS101 CS101" → "CS101")
+        // First try pattern like "ABCD123 ABCD123"
+        const duplicatedCodePattern = /(\b[A-Z]+\d+\b)\s+\1\b/gi;
+        if (duplicatedCodePattern.test(courseName)) {
+          const originalCourseName = courseName;
+          courseName = courseName.replace(duplicatedCodePattern, '$1');
+          if (isTracyPuccinelli) {
+            logger.log(`Fixed duplicated code: "${originalCourseName}" → "${courseName}"`);
+          }
+        }
+        
+        // More general approach for any duplicate strings
+        const duplicatedWordPattern = /(\b\w+\b) \1\b/g;
+        if (duplicatedWordPattern.test(courseName)) {
+          const originalCourseName = courseName;
+          courseName = courseName.replace(duplicatedWordPattern, '$1');
+          if (isTracyPuccinelli) {
+            logger.log(`Fixed duplicated word: "${originalCourseName}" → "${courseName}"`);
+          }
+        }
+        
+        // Handle case like "INTEREGR 170 INTEREGR 170" (with space between letters and numbers)
+        const duplicatedCoursePattern = /(\b[A-Z]+)\s+(\d+)\s+\1\s+\2\b/gi;
+        if (duplicatedCoursePattern.test(courseName)) {
+          const originalCourseName = courseName;
+          courseName = courseName.replace(duplicatedCoursePattern, '$1 $2');
+          if (isTracyPuccinelli) {
+            logger.log(`Fixed duplicated course with space: "${originalCourseName}" → "${courseName}"`);
+          }
+        }
+        
+        // Extract and clean the date (remove duplicates like "Apr 7th, 2025Apr 7th, 2025")
+        let date = entry.match(/Date:\s*(.*?)(?:,|$)/)?.[1]?.trim() || null;
+        if (date) {
+          const originalDate = date;
+          
+          // Pattern to detect duplicated date strings
+          const dateSegments = date.split(/(?<=\d{4})/); // Split after a year
+          if (dateSegments.length > 1 && dateSegments[0] === dateSegments[1]) {
+            date = dateSegments[0];
+          }
+          
+          // More general approach for any duplicate date strings
+          date = date.replace(/(\b\w+ \d+\w+, \d{4})\1/g, '$1');
+          
+          if (isTracyPuccinelli && originalDate !== date) {
+            logger.log(`Fixed duplicated date: "${originalDate}" → "${date}"`);
+          }
+        }
+        
+        // Build the feedback object with cleaned data
+        const feedback = {
+          course: courseName,
+          date: date,
+          qualityRating: entry.match(/Quality:\s*(.*?)(?:,|$)/)?.[1]?.trim() || null,
+          difficultyRating: entry.match(/Difficulty:\s*(.*?)(?:,|$)/)?.[1]?.trim() || null,
+          comments: entry.match(/Comments:\s*(.*?)(?:,\s*Tags:|$)/s)?.[1]?.trim() || null,
+          tags: entry.match(/Tags:\s*(.*?)(?:$)/)?.[1]?.split(',').map(tag => tag.trim()) || []
+        };
+        
+        feedbacks.push(feedback);
+        
+        if (isTracyPuccinelli) {
+          logger.log(`Added feedback with course: "${feedback.course}", date: "${feedback.date}"`);
+        }
+      }
+    });
+  }
+  
+  // Extract unique courses and clean them further
+  const uniqueCourses = new Set();
+  
+  feedbacks.forEach(feedback => {
+    if (feedback.course && feedback.course.trim() !== '') {
+      // Final cleaning of course name
+      let cleanedCourse = feedback.course.trim();
+      
+      // Handle any remaining duplications
+      cleanedCourse = cleanedCourse.replace(/(\b\w+\b) \1\b/g, '$1');
+      
+      // Add to set for deduplication
+      uniqueCourses.add(cleanedCourse);
+    }
+  });
+  
+  professorInfo.courses = Array.from(uniqueCourses);
+  
+  if (isTracyPuccinelli) {
+    logger.log(`Final courses for Tracy Puccinelli: ${professorInfo.courses.join(', ')}`);
+  }
+  
+  // Add the full feedbacks array to the professor info
+  professorInfo.feedbacks = feedbacks;
+
   return professorInfo;
 }
 
 async function getProfessors() {
   const index = pinecone.Index("professors-index");
 
+  // Fetch more professors (increasing from 100 to 300)
   const queryResponse = await index.query({
     vector: await getEmbedding("professor"),
-    topK: 100,
+    topK: 300,
     includeMetadata: true,
   });
 
@@ -185,7 +310,8 @@ async function getProfessors() {
     (a, b) => b.metadata.overallRating - a.metadata.overallRating
   );
 
-  return sortedProfessors.slice(0, 30);
+  // Return all professors instead of limiting to 30
+  return sortedProfessors;
 }
 
 export async function GET() {

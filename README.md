@@ -107,6 +107,6 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 ## 📧 Contact
 
-Your Name - [chhabrapranav2001@gmail.com](mailto:chhabrapranav2001@gmail.com)
+Pranav Chhabra - [chhabrapranav2001@gmail.com](mailto:chhabrapranav2001@gmail.com)
 
-Project Link: [https://github.com/pc9350/Rate-my-professor](https://github.com/pc9350/Rate-my-professor)
+Project Link: [https://profscore-beta.vercel.app/](https://profscore-beta.vercel.app/)

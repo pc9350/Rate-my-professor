@@ -38,7 +38,6 @@ export default function DynamicNavbar() {
             <div className="hidden md:flex items-center space-x-6">
               <NavLink href="/professor">Home</NavLink>
               <NavLink href="/search-professors">Professors</NavLink>
-              <NavLink href="/team">Team</NavLink>
               <UserButton afterSignOutUrl="/" />
             </div>
             <div className="md:hidden flex items-center space-x-4">
@@ -78,7 +77,6 @@ export default function DynamicNavbar() {
             <div className="container mx-auto px-6 py-4 flex flex-col space-y-4">
               <NavLink href="/professor" onClick={toggleMenu}>Home</NavLink>
               <NavLink href="/search-professors" onClick={toggleMenu}>Professors</NavLink>
-              <NavLink href="/team" onClick={toggleMenu}>Team</NavLink>
             </div>
           </motion.div>
         )}

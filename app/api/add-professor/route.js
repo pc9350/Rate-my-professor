@@ -233,8 +233,8 @@ async function splitText(text) {
   }
 }
 
-// Update embedAndStore to use the in-memory fallback
-async function embedAndStore(chunks, source) {
+// Update embedAndStore to handle refreshing
+async function embedAndStore(chunks, source, isRefresh = false) {
   try {
     if (!chunks || chunks.length === 0) {
       throw new Error("No text chunks to embed");
@@ -247,6 +247,43 @@ async function embedAndStore(chunks, source) {
     try {
       index = await ensureIndexExists();
       logger.log("Pinecone index confirmed for embedding storage");
+      
+      // If this is a refresh operation, delete the existing vectors for this source
+      if (isRefresh) {
+        logger.log(`Refresh operation detected for ${source}, removing existing data`);
+        try {
+          // Need to delete vectors with IDs that start with the source
+          // First get all vectors matching this source
+          const existingData = await index.query({
+            filter: { source: { $eq: source } },
+            topK: 1000,
+            includeMetadata: false,
+          });
+          
+          if (existingData && existingData.matches && existingData.matches.length > 0) {
+            const idsToDelete = existingData.matches.map(match => match.id);
+            
+            logger.log(`Found ${idsToDelete.length} existing vectors to delete for source ${source}`);
+            
+            // Delete in batches to avoid hitting API limits
+            const batchSize = 100;
+            for (let i = 0; i < idsToDelete.length; i += batchSize) {
+              const batch = idsToDelete.slice(i, i + batchSize);
+              await index.delete({
+                ids: batch
+              });
+              logger.log(`Deleted batch of ${batch.length} vectors`);
+            }
+            
+            logger.log(`Successfully deleted all existing data for ${source}`);
+          } else {
+            logger.log(`No existing data found for ${source}`);
+          }
+        } catch (deleteError) {
+          logger.error(`Error deleting existing data for ${source}:`, deleteError);
+          // Continue with the upsert even if deletion fails
+        }
+      }
     } catch (indexError) {
       logger.error("Could not access Pinecone index, using in-memory fallback:", indexError);
       useFallback = true;
@@ -314,7 +351,7 @@ export async function POST(req) {
     logger.log("POST request received to /api/add-professor");
     
     const body = await req.json();
-    const { text, source, chunkIndex, totalChunks } = body;
+    const { text, source, chunkIndex, totalChunks, isRefresh } = body;
     
     // Validate required fields
     if (!text) {
@@ -331,14 +368,14 @@ export async function POST(req) {
       );
     }
 
-    logger.log(`Processing chunk ${chunkIndex + 1}/${totalChunks} for professor: ${source}`);
+    logger.log(`Processing chunk ${chunkIndex + 1}/${totalChunks} for professor: ${source}${isRefresh ? ' (REFRESH OPERATION)' : ''}`);
     
     // Split the text into smaller pieces
     const chunks = await splitText(text);
     logger.log(`Split into ${chunks.length} chunks`);
     
     // Store the chunks in Pinecone
-    const results = await embedAndStore(chunks, source);
+    const results = await embedAndStore(chunks, source, isRefresh);
     logger.log(`Successfully stored ${chunks.length} chunks in Pinecone`);
 
     return NextResponse.json({
@@ -346,6 +383,7 @@ export async function POST(req) {
       chunks: chunks.length,
       processedChunk: chunkIndex + 1,
       totalChunks: totalChunks,
+      refreshed: !!isRefresh
     });
   } catch (error) {
     logger.error("Error processing request:", error);
