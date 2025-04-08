@@ -815,7 +815,7 @@ export default function Professors() {
       if (filters.departmentFilter) params.set('department', filters.departmentFilter);
       if (filters.ratingFilter > 0) params.set('minRating', filters.ratingFilter.toString());
 
-      console.log(`Fetching professors with params: ${params.toString()}`); // Debug log
+      // console.log(`Fetching professors with params: ${params.toString()}`); // Debug log
 
       const response = await fetch(`/api/get-professor?${params.toString()}`, {
         method: "GET",
