@@ -6,10 +6,9 @@ import { load } from "cheerio";
 const isDev = process.env.NODE_ENV === 'development';
 
 // Configure Vercel with extended timeout
-export const config = {
-  runtime: 'nodejs',
-  maxDuration: 60, // Extend timeout to 60 seconds
-};
+// Update to use the new runtime export format
+export const runtime = 'nodejs';
+export const maxDuration = 60; // Extend timeout to 60 seconds
 
 // Create a configurable logger
 const logger = {

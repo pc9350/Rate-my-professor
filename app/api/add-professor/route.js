@@ -7,11 +7,9 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { inMemoryVectorStore } from "../shared-memory";
 
-// Configure Vercel with extended timeout
-export const config = {
-  runtime: 'nodejs',
-  maxDuration: 60, // Extend timeout to 60 seconds
-};
+// Replace the old config object with individual exports
+export const runtime = 'nodejs';
+export const maxDuration = 60; // Extend timeout to 60 seconds
 
 // Add configurable logger
 const isDev = process.env.NODE_ENV === 'development';
