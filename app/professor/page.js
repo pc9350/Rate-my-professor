@@ -448,7 +448,7 @@ export default function Home() {
                 </li>
                 <li className="flex items-start">
                   <ArrowRight className="h-4 w-4 text-indigo-400 mr-2 mt-0.5 flex-shrink-0" />
-                  <span>Be specific in your questions (e.g., "What do students say about Professor Smith's exams?")</span>
+                  <span>Be specific in your questions (e.g., &quot;What do students say about Professor Smith&apos;s exams?&quot;)</span>
                 </li>
                 <li className="flex items-start">
                   <ArrowRight className="h-4 w-4 text-indigo-400 mr-2 mt-0.5 flex-shrink-0" />
@@ -515,7 +515,7 @@ export default function Home() {
             </div>
             <h3 className="text-xl font-bold text-white mb-2">AI-Powered Insights</h3>
             <p className="text-indigo-200">
-              Our AI analyzes thousands of reviews to give you comprehensive insights about any professor's teaching style.
+              Our AI analyzes thousands of reviews to give you comprehensive insights about any professor&apos;s teaching style.
             </p>
           </div>
           
@@ -527,7 +527,7 @@ export default function Home() {
             </div>
             <h3 className="text-xl font-bold text-white mb-2">Course Planning</h3>
             <p className="text-indigo-200">
-              Make better decisions when selecting courses by understanding professors' teaching approaches and expectations.
+              Make better decisions when selecting courses by understanding professors&apos; teaching approaches and expectations.
             </p>
           </div>
         </motion.div>

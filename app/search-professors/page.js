@@ -190,7 +190,7 @@ const Modal = ({ isOpen, onClose, professor }) => {
               <div className="space-y-4">
                 {comments.map((comment, index) => (
                   <div key={index} className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
-                    <p className="text-gray-700 dark:text-gray-300 text-sm italic">"{comment.comment}"</p>
+                    <p className="text-gray-700 dark:text-gray-300 text-sm italic">&quot;{comment.comment}&quot;</p>
                     <div className="mt-2 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
                       <span>{comment.course}</span>
                       <div className="flex items-center">
@@ -258,7 +258,7 @@ const Modal = ({ isOpen, onClose, professor }) => {
                   <svg className="w-4 h-4 text-green-600 dark:text-green-400 mt-0.5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
                   </svg>
-                  <span>Look for extra credit opportunities - students mention they're available!</span>
+                  <span>Look for extra credit opportunities - students mention they&apos;re available!</span>
                 </li>
               ) : null}
               <li className="flex items-start">
@@ -687,7 +687,7 @@ const EmptyState = ({ searchTerm, clearSearch }) => (
     <p className="text-indigo-200 mb-6">
       {searchTerm ? (
         <>
-          No professors match your search for "<span className="font-bold">{searchTerm}</span>".
+          No professors match your search for &quot;<span className="font-bold">{searchTerm}</span>&quot;.
           Try a different search term or add more professors to the database.
         </>
       ) : (

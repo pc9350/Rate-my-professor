@@ -121,7 +121,7 @@ export default function ChatbotInterface({
             value={userQuery}
             onChange={(e) => setUserQuery(e.target.value)}
             className="w-full px-4 py-3 bg-white/10 text-white rounded-lg border border-indigo-500/30 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200"
-            placeholder="E.g., What's this professor's teaching style? What do students say about their exams?"
+            placeholder="E.g., What&apos;s this professor&apos;s teaching style? What do students say about their exams?"
             rows="3"
           ></textarea>
           <p className="text-xs text-indigo-300 mt-2 italic">
@@ -171,7 +171,7 @@ export default function ChatbotInterface({
             
             {error.includes("No relevant information") && (
               <p className="text-red-300 text-sm mt-2 italic">
-                Try scraping a professor's data first using the URL from RateMyProfessors
+                Try scraping a professor&apos;s data first using the URL from RateMyProfessors
               </p>
             )}
             
