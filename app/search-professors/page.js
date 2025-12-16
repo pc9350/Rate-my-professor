@@ -846,7 +846,7 @@ export default function Professors() {
         setTotalPages(data.pagination.totalPages || 1); // Use totalPages from API
 
         // Log counts reflecting filtered results
-        console.log(`API returned ${data.professors.length} professors for page ${data.pagination.page}. Total matching filters: ${data.pagination.total}`);
+        // console.log(`API returned ${data.professors.length} professors for page ${data.pagination.page}. Total matching filters: ${data.pagination.total}`);
         
         // Extract unique departments from this data for the department filter dropdown
         if (data.professors.length > 0) {
